@@ -5,13 +5,12 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('user'); // Default role
+  const [role, setRole] = useState('user'); 
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      // Points exactly to your live backend service port layout
       const BACKEND_URL = "https://team-task-manager-production-58d4.up.railway.app"; 
 
       const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
@@ -26,7 +25,7 @@ export default function Register() {
 
       if (response.ok) {
         alert("Account created successfully! Redirecting to login...");
-        navigate('/login'); 
+        navigate('/'); // Cleaned routing link to match your App.jsx layout path
       } else {
         alert("Registration failed: " + data.message);
       }
@@ -82,7 +81,7 @@ export default function Register() {
         </button>
 
         <p className="mt-4 text-sm text-center text-gray-600">
-          Already have an account? <Link to="/login" className="text-blue-600 hover:underline">Sign In</Link>
+          Already have an account? <Link to="/" className="text-blue-600 hover:underline">Sign In</Link>
         </p>
       </form>
     </div>
