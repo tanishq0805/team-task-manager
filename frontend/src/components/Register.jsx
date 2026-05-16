@@ -5,7 +5,7 @@ export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('user'); 
+  const [role, setRole] = useState('user'); // State preserves dropdown role value
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
@@ -25,7 +25,7 @@ export default function Register() {
 
       if (response.ok) {
         alert("Account created successfully! Redirecting to login...");
-        navigate('/'); // Cleaned routing link to match your App.jsx layout path
+        navigate('/'); 
       } else {
         alert("Registration failed: " + data.message);
       }
@@ -64,7 +64,7 @@ export default function Register() {
           />
         </div>
         
-        <div className="mb-6">
+        <div className="mb-4">
           <label className="block text-sm font-semibold text-gray-600 mb-1">Password</label>
           <input 
             type="password" 
@@ -74,6 +74,20 @@ export default function Register() {
             className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500" 
             required
           />
+        </div>
+
+        {/* Dynamic Interactive Role Selection Field */}
+        <div className="mb-6">
+          <label className="block text-sm font-semibold text-gray-600 mb-1">Account Role</label>
+          <select 
+            value={role} 
+            onChange={(e) => setRole(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium text-gray-700"
+          >
+            <option value="user">Standard Member (User)</option>
+            <option value="manager">Project Manager</option>
+            <option value="admin">System Administrator (Admin)</option>
+          </select>
         </div>
         
         <button type="submit" className="w-full bg-green-600 text-white font-bold p-2 rounded hover:bg-green-700 transition duration-200">
