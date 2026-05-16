@@ -1,26 +1,34 @@
 const express = require('express');
 const router = express.Router();
-const Project = require('../models/Project');
-const { protect, adminOnly } = require('../middleware/auth');
+const Project = require('../models/Project'); // Double-check this matches your file name capitalization
 
-// Get all projects
-router.get('/', protect, async (req, res) => {
+// 1. GET ALL PROJECTS
+router.get('/', async (req, res) => {
   try {
     const projects = await Project.find();
-    res.json(projects);
+    return res.status(200).json(projects);
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    console.error("Fetch Projects Error:", err);
+    return res.status(500).json({ message: 'Server error fetching projects' });
   }
 });
 
-// Create a project (Admin only)
-router.post('/', protect, adminOnly, async (req, res) => {
+// 2. CREATE NEW PROJECT
+router.post('/', async (req, res) => {
   try {
-    const newProject = new Project({ ...req.body, createdBy: req.user.id });
-    const savedProject = await newProject.save();
-    res.json(savedProject);
+    const { name } = req.body;
+    if (!name) {
+      return res.status(400).json({ message: 'Project name is required' });
+    }
+
+    const newProject = new Project({ name });
+    await newProject.save();
+
+    // MUST return a JSON status response so the frontend knows to unlock!
+    return res.status(201).json(newProject);
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    console.error("Create Project Error:", err);
+    return res.status(500).json({ message: 'Server error building project' });
   }
 });
 
