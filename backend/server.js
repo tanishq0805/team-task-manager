@@ -6,8 +6,9 @@ require('dotenv').config();
 const app = express();
 
 // Updated Middleware: Allows your live frontend URL to communicate securely
+// Open CORS completely for deployment debugging
 app.use(cors({
-    origin: "https://affectionate-recreation-production-4db2.up.railway.app",
+    origin: true,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]

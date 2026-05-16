@@ -14,7 +14,7 @@ export default function Login() {
     try {
       // ⚠️ CRITICAL STEP: Copy the real URL from your Backend block on Railway and paste it below
       // Make sure it looks like "https://your-backend-service.up.railway.app" without a trailing slash (/)
-      const BACKEND_URL = "team-task-manager-production-58d4.up.railway.app"; 
+      const BACKEND_URL = "https://team-task-manager-production-58d4.up.railway.app"; 
 
       const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
         method: 'POST',
