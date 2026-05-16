@@ -36,8 +36,12 @@ router.post('/login', async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: 'Invalid email or password' });
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1d' });
-    res.json({ token, user: { id: user._id, name: user.name, role: user.role } });
+    // Replace your token signing line exactly with this fallback structure:
+const token = jwt.sign(
+  { id: user._id, role: user.role }, 
+  process.env.JWT_SECRET || 'super_secret_key_change_this_later', 
+  { expiresIn: '1d' }
+);
     
   } catch (err) {
     console.error("\n=== LOGIN ERROR ===");
