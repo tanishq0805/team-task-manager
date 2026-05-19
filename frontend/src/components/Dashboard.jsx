@@ -98,6 +98,23 @@ export default function Dashboard() {
     fetchData();
   };
 
+  // --- NEW: DELETE TASK FUNCTION ---
+  const deleteTask = async (taskId) => {
+    const confirmDelete = window.confirm("Are you sure you want to permanently remove this task?");
+    if (!confirmDelete) return;
+
+    try {
+      await fetch(`${BACKEND_URL}/api/tasks/${taskId}`, {
+        method: 'DELETE',
+        headers: { 'x-auth-token': token }
+      });
+      fetchData(); // Refresh the board after deletion
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+      alert("Error deleting task.");
+    }
+  };
+
   const formatCycleTime = (start, end) => {
     if (!start) return null;
     const startTime = new Date(start).getTime();
@@ -110,13 +127,9 @@ export default function Dashboard() {
     return diffHrs > 0 ? `${diffHrs}h ${diffMins}m` : `${diffMins}m`;
   };
 
-  // =========================================================================
-  // --- ROLE-BASED TASK FILTERING ---
-  // =========================================================================
   const loggedInUserId = user.id || user._id;
   const rawTasks = Array.isArray(tasks) ? tasks : [];
   
-  // Admins see all tasks. Standard users ONLY see tasks assigned to them.
   const taskArray = user.role === 'Admin' 
     ? rawTasks 
     : rawTasks.filter(t => t.assignedTo && (t.assignedTo._id === loggedInUserId || t.assignedTo === loggedInUserId));
@@ -132,19 +145,14 @@ export default function Dashboard() {
   const donePct = Math.round((doneTasks.length / totalCount) * 100);
   const overduePct = Math.round((overdueTasks.length / totalCount) * 100);
 
-  // =========================================================================
-  // --- TEAM MONITOR FILTERING ---
-  // =========================================================================
-  // Filter out Admins so the Team Monitor ONLY displays standard users
   const monitoredUsers = usersList.filter(u => u.role !== 'Admin' && u.role !== 'admin');
 
   const teamWorkloads = monitoredUsers.map(dbUser => {
-    // Find tasks assigned specifically to this user (pulling from rawTasks so Admin sees everything)
     const assignedTasks = rawTasks.filter(t => t.assignedTo && (t.assignedTo._id === dbUser._id || t.assignedTo === dbUser._id));
     
     let isOnline = false;
     if (dbUser.lastActive) {
-      isOnline = (new Date() - new Date(dbUser.lastActive)) < 120000; // Pinged within 2 mins
+      isOnline = (new Date() - new Date(dbUser.lastActive)) < 120000;
     }
     
     let todo = 0, inProgress = 0, done = 0, overdue = 0;
@@ -161,7 +169,6 @@ export default function Dashboard() {
     return { name: dbUser.name, role: dbUser.role, isOnline, total: assignedTasks.length, todo, inProgress, done, overdue };
   });
 
-  // --- ICONS ---
   const IconMenu = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>;
   const IconDash = () => <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>;
   const IconFolder = () => <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>;
@@ -173,7 +180,6 @@ export default function Dashboard() {
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100 font-sans antialiased overflow-hidden">
       
-      {/* LEFT SIDEBAR NAVIGATION */}
       <div className={`bg-slate-900 border-r border-slate-800 transition-all duration-300 flex flex-col ${isSidebarOpen ? 'w-64' : 'w-0 overflow-hidden'}`}>
         <div className="p-6 border-b border-slate-800 flex flex-col h-20 justify-center min-w-[16rem]">
           <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
@@ -380,7 +386,6 @@ export default function Dashboard() {
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Assign To User</label>
                   <select className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-slate-200 focus:ring-2 focus:ring-indigo-500 transition" value={taskForm.assignedTo} onChange={(e) => setTaskForm({...taskForm, assignedTo: e.target.value})}>
                     <option value="">Leave Unassigned</option>
-                    {/* Exclude Admin from dropdown selection if desired, or let Admin assign to anyone */}
                     {usersList.map(u => (
                       <option key={u._id} value={u._id}>{u.name} ({u.role})</option>
                     ))}
@@ -475,7 +480,11 @@ export default function Dashboard() {
                         </p>
                       )}
 
-                      <button onClick={() => updateStatus(task._id, 'In Progress')} className="mt-4 text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-1.5 rounded-lg w-full transition">🔄 Back to In Progress</button>
+                      {/* --- NEW: UPDATED DONE COLUMN BUTTONS (Revert & Remove) --- */}
+                      <div className="grid grid-cols-2 gap-2 mt-4">
+                        <button onClick={() => updateStatus(task._id, 'In Progress')} className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-2 rounded-lg transition">🔄 Revert</button>
+                        <button onClick={() => deleteTask(task._id)} className="text-[10px] bg-red-900/40 hover:bg-red-600 text-red-400 hover:text-white font-bold py-2 rounded-lg transition border border-red-900/50 hover:border-transparent">🗑️ Remove</button>
+                      </div>
                     </div>
                   ))}
                 </div>
