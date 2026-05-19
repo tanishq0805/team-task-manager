@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+
+// Ensure these paths match your file names exactly (watch the capital letters!)
 const Task = require('../models/Task');
 const UserTaskStatus = require('../models/UserTaskStatus');
 
