@@ -1,90 +1,45 @@
 const express = require('express');
 const router = express.Router();
-const jwt = require('jsonwebtoken'); // Added for decoding the user session payload
+const jwt = require('jsonwebtoken');
 const Task = require('../models/Task');
+const UserTaskStatus = require('../models/UserTaskStatus');
 
-// =========================================================================
-// 1. GET ALL TASKS (DYNAMICALLY SCOPED PER USER CREDENTIALS)
-// =========================================================================
+// GET ALL TASKS (Globally visible, individually tracked)
 router.get('/', async (req, res) => {
   try {
-    // Extract token from headers to identify who is making the request
     const token = req.header('x-auth-token');
     if (!token) {
       return res.status(401).json({ message: 'No token found, authorization denied.' });
     }
 
-    // Decode token securely to extract the user's ID and assigned Role
+    // Decode token to find who is logged in
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_key_change_this_later');
     const userId = decoded.id;
-    const userRole = decoded.role;
 
-    let tasks;
+    // 1. Fetch EVERY single task currently in the global pool
+    const globalTasks = await Task.find().populate('project', 'name');
 
-    // ROLE-BASED ACCESS CONTROL FILTERING:
-    // If the account is an Admin, load the entire global workspace framework.
-    // If it's a standard user/member, strictly limit the array query to their assigned tasks.
-    if (userRole === 'Admin') {
-      tasks = await Task.find().populate('project assignedTo', 'name email');
-    } else {
-      tasks = await Task.find({ assignedTo: userId }).populate('project assignedTo', 'name email');
-    }
+    // 2. Fetch any personalized column status changes this specific user has made
+    const personalStatuses = await UserTaskStatus.find({ user: userId });
 
-    return res.status(200).json(tasks);
-  } catch (err) {
-    console.error("Fetch Scoped Tasks Error:", err);
-    return res.status(500).json({ message: 'Server error filtering dashboard task arrays', error: err.message });
-  }
-});
-
-// =========================================================================
-// 2. CREATE TASK WITH ASSIGNMENT PARAMETERS
-// =========================================================================
-router.post('/', async (req, res) => {
-  try {
-    const { title, description, project, assignedTo, priority, dueDate } = req.body;
-    
-    if (!title || !project) {
-      return res.status(400).json({ message: 'Title and Project references are mandatory fields.' });
-    }
-
-    const newTask = new Task({
-      title,
-      description,
-      project,
-      assignedTo: assignedTo || null, // Maps seamlessly to specific team members
-      priority: priority || 'Medium',
-      dueDate: dueDate || null
+    // 3. Merge them: If the user hasn't touched a task, show it in 'Todo' instead of hiding it!
+    const individualizedTasks = globalTasks.map(task => {
+      const taskObject = task.toObject();
+      
+      // Look for a custom status row for this specific task and user
+      const customStatusEntry = personalStatuses.find(s => s.task.toString() === task._id.toString());
+      
+      // Fallback Assignment: If found, use it. Otherwise, default to 'Todo' so it's visible.
+      taskObject.status = customStatusEntry ? customStatusEntry.status : 'Todo';
+      
+      return taskObject;
     });
 
-    await newTask.save();
-    return res.status(201).json(newTask);
+    return res.status(200).json(individualizedTasks);
   } catch (err) {
-    console.error("Create Task Error:", err);
-    return res.status(500).json({ message: 'Server error creating task object configuration' });
+    console.error("Board rendering error:", err);
+    return res.status(500).json({ message: 'Server error organizing task matrices.' });
   }
 });
 
-// =========================================================================
-// 3. UPDATE TASK STATUS / ATTRIBUTES
-// =========================================================================
-router.put('/:id', async (req, res) => {
-  try {
-    const updatedTask = await Task.findByIdAndUpdate(
-      req.params.id, 
-      req.body, 
-      { new: true } // Returns the newly modified document to update frontend state immediately
-    );
-    
-    if (!updatedTask) {
-      return res.status(404).json({ message: 'Target task element not found' });
-    }
-
-    return res.status(200).json(updatedTask);
-  } catch (err) {
-    console.error("Update Task Error:", err);
-    return res.status(500).json({ message: 'Server error updating task structural states' });
-  }
-});
-
-module.exports = router;
+// Keep your POST and PUT endpoints exactly the same as before...
