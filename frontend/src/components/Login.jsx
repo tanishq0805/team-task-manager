@@ -37,7 +37,8 @@ export default function Login() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-64px)] bg-slate-950 text-slate-100 px-4">
+    // Update this line right here 👇
+    <div className="flex items-center justify-center min-h-screen bg-slate-950 text-slate-100 px-4">
       <div className="bg-slate-900/60 backdrop-blur-xl p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-800">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-black tracking-tight text-white">Welcome Back</h2>
