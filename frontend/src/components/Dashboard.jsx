@@ -38,23 +38,33 @@ export default function Dashboard() {
     await fetch(`${BACKEND_URL}/api/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-      body: JSON.stringify({ name: newProjectName, admin: user.id })
+      body: JSON.stringify({ name: newProjectName, admin: user.id || user._id })
     });
     setNewProjectName('');
     fetchData();
   };
 
+  // =========================================================================
+  // UPDATED HOOK: Dynamic Assignment Handlers passing explicit validation keys
+  // =========================================================================
   const handleCreateTask = async (e) => {
     e.preventDefault();
-    if (!projects.length) return alert("Initialize a project container first!");
+    if (!projects || !projects.length) return alert("Initialize a project container first!");
     
+    // Fallback resolution: Ensures a true string/object ID mapping passes seamlessly 
+    // to match what your Mongoose Schema validation rules look for.
+    const currentUserId = user.id || user._id;
+
     await fetch(`${BACKEND_URL}/api/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
       body: JSON.stringify({ 
-        ...taskForm,
-        project: projects[0]._id,
-        assignedTo: user.id
+        title: taskForm.title,
+        description: taskForm.description,
+        priority: taskForm.priority,
+        dueDate: taskForm.dueDate,
+        project: projects[0]._id, // Maps dynamically to your cloud container branch
+        assignedTo: currentUserId  // Passes your explicitly verified active session ID
       })
     });
     setTaskForm({ title: '', description: '', priority: 'Medium', dueDate: '' });
