@@ -5,11 +5,9 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   
-  // Navigation & Toggle States
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState('dashboard'); // Options: dashboard, init-project, create-task, task-management
+  const [activeTab, setActiveTab] = useState('dashboard'); 
   
-  // Form Staging States
   const [newProjectName, setNewProjectName] = useState('');
   const [taskForm, setTaskForm] = useState({ title: '', description: '', priority: 'Medium', dueDate: '' });
   
@@ -81,7 +79,7 @@ export default function Dashboard() {
 
   // --- ANALYTICAL CALCULATIONS ---
   const taskArray = Array.isArray(tasks) ? tasks : [];
-  // Matching exact required assignment statuses: To Do, In Progress, Done
+  
   const todoTasks = taskArray.filter(t => t.status === 'Todo' || t.status === 'todo' || t.status === 'To Do');
   const inProgressTasks = taskArray.filter(t => t.status === 'In Progress');
   const doneTasks = taskArray.filter(t => t.status === 'Done');
@@ -91,12 +89,34 @@ export default function Dashboard() {
     return new Date(t.dueDate) < new Date();
   });
 
-  // Graphical Percentage Calculations
   const totalCount = taskArray.length || 1; 
   const todoPct = Math.round((todoTasks.length / totalCount) * 100);
   const progressPct = Math.round((inProgressTasks.length / totalCount) * 100);
   const donePct = Math.round((doneTasks.length / totalCount) * 100);
   const overduePct = Math.round((overdueTasks.length / totalCount) * 100);
+
+  // --- NEW: TEAM WORKLOAD GROUPING LOGIC ---
+  const teamWorkloads = Object.values(taskArray.reduce((acc, task) => {
+    // If the backend isn't populating the user name, it defaults to 'Unassigned' or the ID
+    const userName = task.assignedTo?.name || 'Unassigned Workspace';
+    
+    if (!acc[userName]) {
+      acc[userName] = { name: userName, total: 0, todo: 0, inProgress: 0, done: 0, overdue: 0 };
+    }
+    
+    acc[userName].total += 1;
+    const status = task.status?.toLowerCase() || 'todo';
+    
+    if (status.includes('todo') || status === 'to do') acc[userName].todo += 1;
+    else if (status === 'in progress') acc[userName].inProgress += 1;
+    else if (status === 'done') acc[userName].done += 1;
+    
+    if (task.dueDate && new Date(task.dueDate) < new Date() && status !== 'done') {
+      acc[userName].overdue += 1;
+    }
+    
+    return acc;
+  }, {}));
 
   // --- ICONS ---
   const IconMenu = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>;
@@ -104,6 +124,7 @@ export default function Dashboard() {
   const IconFolder = () => <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>;
   const IconPlus = () => <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>;
   const IconBoard = () => <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>;
+  const IconUsers = () => <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>;
   const IconLogout = () => <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>;
 
   return (
@@ -123,15 +144,19 @@ export default function Dashboard() {
             <IconDash /> Dashboard
           </button>
           
-          {/* Renamed to exactly match assignment parameters */}
           <button onClick={() => setActiveTab('task-management')} className={`w-full flex items-center p-3 rounded-xl text-sm font-semibold transition ${activeTab === 'task-management' ? 'bg-indigo-600/10 text-indigo-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'}`}>
             <IconBoard /> Task Management
           </button>
 
-          {/* Role-Based Access controls */}
           {user.role === 'Admin' && (
             <>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 ml-2 mt-8">Admin Controls</p>
+              
+              {/* NEW MONITORING TAB */}
+              <button onClick={() => setActiveTab('team-monitor')} className={`w-full flex items-center p-3 rounded-xl text-sm font-semibold transition ${activeTab === 'team-monitor' ? 'bg-amber-600/10 text-amber-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'}`}>
+                <IconUsers /> Team Monitor
+              </button>
+
               <button onClick={() => setActiveTab('init-project')} className={`w-full flex items-center p-3 rounded-xl text-sm font-semibold transition ${activeTab === 'init-project' ? 'bg-emerald-600/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'}`}>
                 <IconFolder /> Create Project
               </button>
@@ -157,8 +182,6 @@ export default function Dashboard() {
 
       {/* MAIN VIEWPORT COMPARTMENT */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        
-        {/* Top Header Bar */}
         <header className="h-20 bg-slate-950/80 backdrop-blur-md border-b border-slate-800 flex items-center justify-between px-6 z-10">
           <div className="flex items-center gap-4">
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="text-slate-400 hover:text-white transition p-2 rounded-lg hover:bg-slate-800">
@@ -174,10 +197,9 @@ export default function Dashboard() {
           </button>
         </header>
 
-        {/* Dynamic Content Area */}
         <main className="flex-1 overflow-y-auto p-8 bg-slate-950 relative">
           
-          {/* TAB 1: DASHBOARD (Assignment Req 4) */}
+          {/* TAB 1: DASHBOARD */}
           {activeTab === 'dashboard' && (
             <div className="max-w-6xl mx-auto animation-fade-in">
               <div className="mb-8">
@@ -221,7 +243,59 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* TAB 2: CREATE PROJECT (Admin Only) */}
+          {/* TAB 2: TEAM MONITOR (Admin Only) */}
+          {activeTab === 'team-monitor' && user.role === 'Admin' && (
+             <div className="max-w-6xl mx-auto animation-fade-in">
+              <div className="mb-8">
+                <h2 className="text-2xl font-black text-white mb-2">Team Workload Monitor</h2>
+                <p className="text-slate-400 text-sm">Track individual task distribution and real-time operational status.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {teamWorkloads.length === 0 ? (
+                   <p className="text-slate-500 text-sm col-span-3">No active task data available to monitor.</p>
+                ) : (
+                  teamWorkloads.map((member, index) => (
+                    <div key={index} className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800 shadow-xl">
+                      <div className="flex items-center gap-4 mb-6 border-b border-slate-800 pb-4">
+                        <div className="w-10 h-10 rounded-full bg-amber-900/30 border border-amber-800 flex items-center justify-center text-amber-500 font-bold">
+                          {member.name.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <h3 className="text-white font-bold">{member.name}</h3>
+                          <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">{member.total} Total Assigned</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-semibold text-slate-400">To Do</span>
+                          <span className="text-sm font-bold text-indigo-400 bg-indigo-950/40 px-3 py-1 rounded-lg border border-indigo-900/50">{member.todo}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-semibold text-slate-400">In Progress</span>
+                          <span className="text-sm font-bold text-cyan-400 bg-cyan-950/40 px-3 py-1 rounded-lg border border-cyan-900/50">{member.inProgress}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-semibold text-slate-400">Done</span>
+                          <span className="text-sm font-bold text-emerald-400 bg-emerald-950/40 px-3 py-1 rounded-lg border border-emerald-900/50">{member.done}</span>
+                        </div>
+                        
+                        {member.overdue > 0 && (
+                          <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center">
+                            <span className="text-xs font-bold text-red-500">⚠ Breached Deadlines</span>
+                            <span className="text-sm font-bold text-red-400">{member.overdue}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: CREATE PROJECT (Admin Only) */}
           {activeTab === 'init-project' && user.role === 'Admin' && (
             <div className="max-w-2xl mx-auto bg-slate-900/50 p-8 rounded-3xl border border-slate-800 shadow-2xl">
               <h2 className="text-2xl font-black text-white mb-2">Create Project</h2>
@@ -237,7 +311,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* TAB 3: ASSIGN TASKS (Admin Only) */}
+          {/* TAB 4: ASSIGN TASKS (Admin Only) */}
           {activeTab === 'create-task' && user.role === 'Admin' && (
             <div className="max-w-3xl mx-auto bg-slate-900/50 p-8 rounded-3xl border border-slate-800 shadow-2xl">
               <h2 className="text-2xl font-black text-white mb-2">Create and Assign Tasks</h2>
@@ -269,13 +343,13 @@ export default function Dashboard() {
                 </div>
 
                 <button type="submit" className="md:col-span-2 mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition shadow-lg shadow-indigo-500/20 text-sm" disabled={!projects.length}>
-                  {projects.length ? 'Assign Task to Users' : '⚠️ No Projects Available to Host Task'}
+                  {projects.length ? 'Assign Task' : '⚠️ No Projects Available to Host Task'}
                 </button>
               </form>
             </div>
           )}
 
-          {/* TAB 4: TASK MANAGEMENT (Visible to both Admin & Members) */}
+          {/* TAB 5: TASK MANAGEMENT */}
           {activeTab === 'task-management' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full pb-10">
               
