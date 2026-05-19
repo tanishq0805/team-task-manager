@@ -4,31 +4,26 @@ import { useNavigate } from 'react-router-dom';
 export default function Dashboard() {
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
+  const [usersList, setUsersList] = useState([]); // NEW: Stores all DB users
   
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeTab, setActiveTab] = useState('dashboard'); 
   
   const [newProjectName, setNewProjectName] = useState('');
-  const [taskForm, setTaskForm] = useState({ title: '', description: '', priority: 'Medium', dueDate: '' });
+  const [taskForm, setTaskForm] = useState({ title: '', description: '', priority: 'Medium', dueDate: '', assignedTo: '' });
   
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const BACKEND_URL = "https://team-task-manager-production-58d4.up.railway.app";
 
-  // --- NEW: HEARTBEAT PING SYSTEM ---
   useEffect(() => {
     if (!token) { navigate('/'); return; }
     
-    // 1. Initial Data Pull & Ping
     fetchData();
     pingServer();
 
-    // 2. Silent Heartbeat: Pings backend every 60 seconds to stay "Online"
-    const pingInterval = setInterval(() => {
-      pingServer();
-    }, 60000);
-
+    const pingInterval = setInterval(() => { pingServer(); }, 60000);
     return () => clearInterval(pingInterval);
   }, [navigate, token]);
 
@@ -42,12 +37,16 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       const headers = { 'x-auth-token': token };
-      const [tasksRes, projsRes] = await Promise.all([
+      // NEW: Fetching the Users list alongside tasks and projects
+      const [tasksRes, projsRes, usersRes] = await Promise.all([
         fetch(`${BACKEND_URL}/api/tasks`, { headers }),
-        fetch(`${BACKEND_URL}/api/projects`, { headers })
+        fetch(`${BACKEND_URL}/api/projects`, { headers }),
+        fetch(`${BACKEND_URL}/api/auth/users`, { headers })
       ]);
+      
       setTasks(await tasksRes.json());
       setProjects(await projsRes.json());
+      if (usersRes.ok) setUsersList(await usersRes.json());
     } catch (err) {
       console.error("Error pulling database profiles", err);
     }
@@ -70,18 +69,23 @@ export default function Dashboard() {
     e.preventDefault();
     if (!projects || !projects.length) return alert("Please create a project first.");
     
+    const payload = { 
+      title: taskForm.title,
+      description: taskForm.description,
+      priority: taskForm.priority,
+      dueDate: taskForm.dueDate,
+      project: projects[0]._id
+    };
+    
+    if (taskForm.assignedTo) payload.assignedTo = taskForm.assignedTo;
+
     await fetch(`${BACKEND_URL}/api/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-auth-token': token },
-      body: JSON.stringify({ 
-        title: taskForm.title,
-        description: taskForm.description,
-        priority: taskForm.priority,
-        dueDate: taskForm.dueDate,
-        project: projects[0]._id
-      })
+      body: JSON.stringify(payload)
     });
-    setTaskForm({ title: '', description: '', priority: 'Medium', dueDate: '' });
+    
+    setTaskForm({ title: '', description: '', priority: 'Medium', dueDate: '', assignedTo: '' });
     alert("Task Assigned Successfully!");
     fetchData();
   };
@@ -95,7 +99,6 @@ export default function Dashboard() {
     fetchData();
   };
 
-  // --- NEW: TIME TRACKING ENGINE ---
   const formatCycleTime = (start, end) => {
     if (!start) return null;
     const startTime = new Date(start).getTime();
@@ -105,21 +108,14 @@ export default function Dashboard() {
     if (diffMs < 60000) return "< 1m";
     const diffHrs = Math.floor(diffMs / 3600000);
     const diffMins = Math.floor((diffMs % 3600000) / 60000);
-    
     return diffHrs > 0 ? `${diffHrs}h ${diffMins}m` : `${diffMins}m`;
   };
 
-  // --- ANALYTICAL CALCULATIONS ---
   const taskArray = Array.isArray(tasks) ? tasks : [];
-  
   const todoTasks = taskArray.filter(t => t.status === 'Todo' || t.status === 'todo' || t.status === 'To Do');
   const inProgressTasks = taskArray.filter(t => t.status === 'In Progress');
   const doneTasks = taskArray.filter(t => t.status === 'Done');
-  
-  const overdueTasks = taskArray.filter(t => {
-    if (!t.dueDate || t.status === 'Done') return false;
-    return new Date(t.dueDate) < new Date();
-  });
+  const overdueTasks = taskArray.filter(t => t.dueDate && t.status !== 'Done' && new Date(t.dueDate) < new Date());
 
   const totalCount = taskArray.length || 1; 
   const todoPct = Math.round((todoTasks.length / totalCount) * 100);
@@ -127,38 +123,44 @@ export default function Dashboard() {
   const donePct = Math.round((doneTasks.length / totalCount) * 100);
   const overduePct = Math.round((overdueTasks.length / totalCount) * 100);
 
-  // --- UPGRADED: TEAM WORKLOAD & PRESENCE LOGIC ---
-  const teamWorkloads = Object.values(taskArray.reduce((acc, task) => {
-    const assignedUser = task.assignedTo;
-    const userName = assignedUser?.name || 'Unassigned Workspace';
+  // --- UPGRADED: Maps over ALL registered users from the database ---
+  const teamWorkloads = usersList.map(dbUser => {
+    // Find tasks assigned specifically to this user
+    const assignedTasks = taskArray.filter(t => t.assignedTo && (t.assignedTo._id === dbUser._id || t.assignedTo === dbUser._id));
     
-    if (!acc[userName]) {
-      let isOnline = false;
-      // If they pinged within the last 2 minutes (120,000ms), they are online
-      if (assignedUser?.lastActive) {
-        isOnline = (new Date() - new Date(assignedUser.lastActive)) < 120000;
-      }
+    let isOnline = false;
+    if (dbUser.lastActive) {
+      isOnline = (new Date() - new Date(dbUser.lastActive)) < 120000; // Pinged within 2 mins
+    }
+    
+    let todo = 0, inProgress = 0, done = 0, overdue = 0;
+    
+    assignedTasks.forEach(t => {
+      const status = t.status?.toLowerCase() || 'todo';
+      if (status.includes('todo') || status === 'to do') todo++;
+      else if (status === 'in progress') inProgress++;
+      else if (status === 'done') done++;
       
-      acc[userName] = { 
-        name: userName, 
-        isOnline,
-        total: 0, todo: 0, inProgress: 0, done: 0, overdue: 0 
-      };
-    }
-    
-    acc[userName].total += 1;
-    const status = task.status?.toLowerCase() || 'todo';
-    
-    if (status.includes('todo') || status === 'to do') acc[userName].todo += 1;
-    else if (status === 'in progress') acc[userName].inProgress += 1;
-    else if (status === 'done') acc[userName].done += 1;
-    
-    if (task.dueDate && new Date(task.dueDate) < new Date() && status !== 'done') {
-      acc[userName].overdue += 1;
-    }
-    
-    return acc;
-  }, {}));
+      if (t.dueDate && new Date(t.dueDate) < new Date() && status !== 'done') overdue++;
+    });
+
+    return { name: dbUser.name, role: dbUser.role, isOnline, total: assignedTasks.length, todo, inProgress, done, overdue };
+  });
+
+  // Calculate purely unassigned tasks to show in a separate card
+  const unassignedArray = taskArray.filter(t => !t.assignedTo);
+  let uTodo = 0, uInProgress = 0, uDone = 0, uOverdue = 0;
+  unassignedArray.forEach(t => {
+    const status = t.status?.toLowerCase() || 'todo';
+    if (status.includes('todo') || status === 'to do') uTodo++;
+    else if (status === 'in progress') uInProgress++;
+    else if (status === 'done') uDone++;
+    if (t.dueDate && new Date(t.dueDate) < new Date() && status !== 'done') uOverdue++;
+  });
+  
+  if (unassignedArray.length > 0) {
+    teamWorkloads.unshift({ name: 'Unassigned Workspace', role: 'System', isOnline: true, total: unassignedArray.length, todo: uTodo, inProgress: uInProgress, done: uDone, overdue: uOverdue });
+  }
 
   // --- ICONS ---
   const IconMenu = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>;
@@ -292,57 +294,53 @@ export default function Dashboard() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {teamWorkloads.length === 0 ? (
-                   <p className="text-slate-500 text-sm col-span-3">No active task data available to monitor.</p>
-                ) : (
-                  teamWorkloads.map((member, index) => (
-                    <div key={index} className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
-                      <div className="flex items-center gap-4 mb-6 border-b border-slate-800 pb-4">
-                        <div className="w-10 h-10 rounded-full bg-amber-900/30 border border-amber-800 flex items-center justify-center text-amber-500 font-bold relative">
-                          {member.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <h3 className="text-white font-bold flex items-center gap-2">
-                            {member.name}
-                            {/* Online/Offline Status Indicator */}
-                            {member.name !== 'Unassigned Workspace' && (
-                              <span className="flex items-center gap-1 text-[9px] uppercase tracking-widest font-black">
-                                {member.isOnline ? (
-                                  <span className="text-emerald-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span> Online</span>
-                                ) : (
-                                  <span className="text-slate-500 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-600"></span> Offline</span>
-                                )}
-                              </span>
-                            )}
-                          </h3>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">{member.total} Total Assigned</p>
-                        </div>
+                {teamWorkloads.map((member, index) => (
+                  <div key={index} className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
+                    <div className="flex items-center gap-4 mb-6 border-b border-slate-800 pb-4">
+                      <div className="w-10 h-10 rounded-full bg-amber-900/30 border border-amber-800 flex items-center justify-center text-amber-500 font-bold relative">
+                        {member.name.charAt(0).toUpperCase()}
                       </div>
-
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-semibold text-slate-400">To Do</span>
-                          <span className="text-sm font-bold text-indigo-400 bg-indigo-950/40 px-3 py-1 rounded-lg border border-indigo-900/50">{member.todo}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-semibold text-slate-400">In Progress</span>
-                          <span className="text-sm font-bold text-cyan-400 bg-cyan-950/40 px-3 py-1 rounded-lg border border-cyan-900/50">{member.inProgress}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-semibold text-slate-400">Done</span>
-                          <span className="text-sm font-bold text-emerald-400 bg-emerald-950/40 px-3 py-1 rounded-lg border border-emerald-900/50">{member.done}</span>
-                        </div>
-                        
-                        {member.overdue > 0 && (
-                          <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center">
-                            <span className="text-xs font-bold text-red-500">⚠ Breached Deadlines</span>
-                            <span className="text-sm font-bold text-red-400">{member.overdue}</span>
-                          </div>
-                        )}
+                      <div>
+                        <h3 className="text-white font-bold flex items-center gap-2">
+                          {member.name}
+                          {/* Online/Offline Status Indicator */}
+                          {member.name !== 'Unassigned Workspace' && (
+                            <span className="flex items-center gap-1 text-[9px] uppercase tracking-widest font-black">
+                              {member.isOnline ? (
+                                <span className="text-emerald-400 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span> Online</span>
+                              ) : (
+                                <span className="text-slate-500 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-slate-600"></span> Offline</span>
+                              )}
+                            </span>
+                          )}
+                        </h3>
+                        <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">{member.role} • {member.total} Assigned</p>
                       </div>
                     </div>
-                  ))
-                )}
+
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-semibold text-slate-400">To Do</span>
+                        <span className="text-sm font-bold text-indigo-400 bg-indigo-950/40 px-3 py-1 rounded-lg border border-indigo-900/50">{member.todo}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-semibold text-slate-400">In Progress</span>
+                        <span className="text-sm font-bold text-cyan-400 bg-cyan-950/40 px-3 py-1 rounded-lg border border-cyan-900/50">{member.inProgress}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-semibold text-slate-400">Done</span>
+                        <span className="text-sm font-bold text-emerald-400 bg-emerald-950/40 px-3 py-1 rounded-lg border border-emerald-900/50">{member.done}</span>
+                      </div>
+                      
+                      {member.overdue > 0 && (
+                        <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between items-center">
+                          <span className="text-xs font-bold text-red-500">⚠ Breached Deadlines</span>
+                          <span className="text-sm font-bold text-red-400">{member.overdue}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -363,11 +361,11 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* TAB 4: ASSIGN TASKS */}
+          {/* TAB 4: ASSIGN TASKS (Now with dropdown!) */}
           {activeTab === 'create-task' && user.role === 'Admin' && (
             <div className="max-w-3xl mx-auto bg-slate-900/50 p-8 rounded-3xl border border-slate-800 shadow-2xl">
               <h2 className="text-2xl font-black text-white mb-2">Create and Assign Tasks</h2>
-              <p className="text-slate-400 text-sm mb-8">Set titles, descriptions, due dates, and priority levels.</p>
+              <p className="text-slate-400 text-sm mb-8">Set titles, descriptions, due dates, and select a user to assign to.</p>
               
               <form onSubmit={handleCreateTask} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
@@ -378,6 +376,17 @@ export default function Dashboard() {
                 <div className="md:col-span-2">
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Description</label>
                   <textarea placeholder="Task Description..." rows="3" className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-white focus:ring-2 focus:ring-indigo-500 transition resize-none" value={taskForm.description} onChange={(e) => setTaskForm({...taskForm, description: e.target.value})} />
+                </div>
+
+                {/* NEW: USER DROPDOWN */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Assign To User</label>
+                  <select className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-slate-200 focus:ring-2 focus:ring-indigo-500 transition" value={taskForm.assignedTo} onChange={(e) => setTaskForm({...taskForm, assignedTo: e.target.value})}>
+                    <option value="">Leave Unassigned</option>
+                    {usersList.map(u => (
+                      <option key={u._id} value={u._id}>{u.name} ({u.role})</option>
+                    ))}
+                  </select>
                 </div>
                 
                 <div>
@@ -401,11 +410,10 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* TAB 5: TASK MANAGEMENT WITH TIME TRACKING */}
+          {/* TAB 5: TASK MANAGEMENT */}
           {activeTab === 'task-management' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full pb-10">
               
-              {/* TO DO Column */}
               <div className="bg-slate-900/30 p-4 rounded-2xl border border-slate-800/80 flex flex-col min-h-[500px]">
                 <h2 className="font-bold text-xs uppercase tracking-widest text-slate-400 mb-4 flex items-center justify-between bg-slate-900/80 p-3 rounded-xl border border-slate-800">
                   <span>📌 To Do</span> <span className="bg-slate-800 px-2 py-0.5 rounded text-[10px] font-black">{todoTasks.length}</span>
@@ -425,7 +433,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* IN PROGRESS Column */}
               <div className="bg-slate-900/30 p-4 rounded-2xl border border-slate-800/80 flex flex-col min-h-[500px]">
                 <h2 className="font-bold text-xs uppercase tracking-widest text-cyan-400 mb-4 flex items-center justify-between bg-slate-900/80 p-3 rounded-xl border border-slate-800">
                   <span>⏳ In Progress</span> <span className="bg-cyan-950 text-cyan-400 px-2 py-0.5 rounded text-[10px] font-black">{inProgressTasks.length}</span>
@@ -437,7 +444,6 @@ export default function Dashboard() {
                       <h4 className="font-bold text-white text-sm tracking-tight pl-2">{task.title}</h4>
                       <p className="text-xs text-slate-400 mt-2 pl-2 line-clamp-2">{task.description}</p>
                       
-                      {/* Active Execution Timer */}
                       {task.startedAt && (
                         <p className="text-[10px] text-cyan-400 mt-3 font-semibold pl-2">
                           ⏱️ Elapsed: {formatCycleTime(task.startedAt, null)}
@@ -453,7 +459,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* DONE Column */}
               <div className="bg-slate-900/30 p-4 rounded-2xl border border-slate-800/80 flex flex-col min-h-[500px]">
                 <h2 className="font-bold text-xs uppercase tracking-widest text-emerald-400 mb-4 flex items-center justify-between bg-slate-900/80 p-3 rounded-xl border border-slate-800">
                   <span>✅ Done</span> <span className="bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded text-[10px] font-black">{doneTasks.length}</span>
@@ -463,7 +468,6 @@ export default function Dashboard() {
                     <div key={task._id} className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 shadow-sm opacity-60">
                       <h4 className="font-bold text-slate-400 text-sm line-through tracking-tight">{task.title}</h4>
                       
-                      {/* Completed Cycle Time */}
                       {task.startedAt && task.completedAt && (
                         <p className="text-[10px] text-emerald-400 mt-2 font-semibold">
                           ⏱️ Duration: {formatCycleTime(task.startedAt, task.completedAt)}

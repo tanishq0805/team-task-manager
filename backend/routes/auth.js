@@ -80,4 +80,23 @@ router.post('/ping', async (req, res) => {
   }
 });
 
+// =========================================================================
+// 4. GET ALL USERS (For Admin Monitor & Task Assignment)
+// =========================================================================
+router.get('/users', async (req, res) => {
+  try {
+    const token = req.header('x-auth-token');
+    if (!token) return res.status(401).send();
+    
+    // Verify token to ensure security
+    jwt.verify(token, process.env.JWT_SECRET || 'super_secret_key_change_this_later');
+    
+    // Fetch all users but exclude their passwords for security
+    const users = await User.find().select('-password');
+    return res.status(200).json(users);
+  } catch (err) {
+    return res.status(500).json({ message: 'Server error fetching users' });
+  }
+});
+
 module.exports = router;
