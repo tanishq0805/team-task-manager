@@ -29,7 +29,6 @@ export default function Dashboard() {
     fetch(`${BACKEND_URL}/api/auth/ping`, { method: 'POST', headers: { 'x-auth-token': token } }).catch(err => console.log("Ping skipped"));
   };
 
-  // --- NEW: Handle Logout properly to set offline status ---
   const handleLogout = async () => {
     try {
       await fetch(`${BACKEND_URL}/api/auth/logout`, {
@@ -134,7 +133,6 @@ export default function Dashboard() {
 
   const monitoredUsers = usersList.filter(u => u.role !== 'Admin' && u.role !== 'admin');
 
-  // --- UPDATED: Foolproof Task Counting Logic ---
   const teamWorkloads = monitoredUsers.map(dbUser => {
     const assignedTasks = rawTasks.filter(t => t.assignedTo && (t.assignedTo._id === dbUser._id || t.assignedTo === dbUser._id));
     
@@ -146,7 +144,6 @@ export default function Dashboard() {
     assignedTasks.forEach(t => {
       const status = t.status?.toLowerCase() || 'todo';
       
-      // Strict isolation of statuses to ensure perfect tracking
       if (t.isArchived || status === 'done') {
         done++;
       } else if (status === 'in progress') {
@@ -236,7 +233,6 @@ export default function Dashboard() {
               {activeTab.replace('-', ' ')}
             </h1>
           </div>
-          {/* UPDATED LOGOUT BUTTON */}
           <button onClick={handleLogout} className="flex items-center bg-slate-900 hover:bg-red-950/40 text-slate-300 hover:text-red-400 font-semibold px-4 py-2 rounded-xl transition border border-slate-800 hover:border-red-900/60 text-xs">
             <IconLogout /> Log Out
           </button>
@@ -341,7 +337,11 @@ export default function Dashboard() {
                             </td>
                             <td className="p-4 flex gap-2 justify-end">
                               <button onClick={() => updateStatus(task._id, 'In Progress')} className="px-3 py-2 text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-lg transition" title="Restore to active board">🔄 Revert</button>
-                              <button onClick={() => deleteTask(task._id)} className="px-3 py-2 text-[10px] bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white font-bold rounded-lg transition" title="Permanently Delete">🗑️ Delete</button>
+                              
+                              {/* SECURITY: Only Admins can permanently delete archived tasks */}
+                              {user.role === 'Admin' && (
+                                <button onClick={() => deleteTask(task._id)} className="px-3 py-2 text-[10px] bg-red-900/20 hover:bg-red-600 text-red-500 hover:text-white font-bold rounded-lg transition" title="Permanently Delete">🗑️ Delete</button>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -406,9 +406,7 @@ export default function Dashboard() {
                 <div className="md:col-span-2"><label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Description</label><textarea placeholder="Task Description..." rows="3" className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-white focus:ring-2 focus:ring-indigo-500 resize-none" value={taskForm.description} onChange={(e) => setTaskForm({...taskForm, description: e.target.value})} /></div>
                 <div className="md:col-span-2"><label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Assign To User</label><select className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-slate-200 focus:ring-2 focus:ring-indigo-500" value={taskForm.assignedTo} onChange={(e) => setTaskForm({...taskForm, assignedTo: e.target.value})}><option value="">Leave Unassigned</option>{usersList.map(u => (<option key={u._id} value={u._id}>{u.name} ({u.role})</option>))}</select></div>
                 <div><label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Priority</label><select className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-slate-200 focus:ring-2 focus:ring-indigo-500" value={taskForm.priority} onChange={(e) => setTaskForm({...taskForm, priority: e.target.value})}><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></select></div>
-                
                 <div><label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Due Date</label><input type="date" className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-slate-200 focus:ring-2 focus:ring-indigo-500 transition [color-scheme:dark]" value={taskForm.dueDate} onChange={(e) => setTaskForm({...taskForm, dueDate: e.target.value})} /></div>
-                
                 <button type="submit" className="md:col-span-2 mt-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition shadow-lg text-sm" disabled={!projects.length}>{projects.length ? 'Assign Task' : '⚠️ No Projects Available'}</button>
               </form>
             </div>

@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'super_secret_key_change_this_later');
     const userId = decoded.id;
 
-    // FIX: Added .populate('assignedTo') so the frontend can read names and online status!
+    // .populate('assignedTo') ensures the frontend can read names and online status
     const globalTasks = await Task.find()
       .populate('project', 'name')
       .populate('assignedTo', 'name lastActive');
@@ -45,7 +45,6 @@ router.get('/', async (req, res) => {
 // =========================================================================
 router.post('/', async (req, res) => {
   try {
-    // FIX: Added 'assignedTo' here so the dropdown selection saves to the DB!
     const { title, description, project, priority, dueDate, assignedTo } = req.body;
     const newTask = new Task({ title, description, project, priority, dueDate, assignedTo });
     await newTask.save();
@@ -110,7 +109,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // =========================================================================
-// 4. DELETE TASK
+// 4. DELETE TASK (Synchronized Purge)
 // =========================================================================
 router.delete('/:id', async (req, res) => {
   try {
@@ -120,14 +119,14 @@ router.delete('/:id', async (req, res) => {
     // Verify user session
     jwt.verify(token, process.env.JWT_SECRET || 'super_secret_key_change_this_later');
 
-    // Delete the global task
+    // Action 1: Delete the primary task from the global database
     const deletedTask = await Task.findByIdAndDelete(req.params.id);
     if (!deletedTask) return res.status(404).json({ message: 'Task not found' });
 
-    // Clean up any individual user status tracking tied to this task
+    // Action 2: Instantly scrub the task from ALL users' personal assignment logs
     await UserTaskStatus.deleteMany({ task: req.params.id });
 
-    return res.status(200).json({ message: 'Task removed successfully' });
+    return res.status(200).json({ message: 'Task removed successfully from all logs' });
   } catch (err) {
     console.error("Delete Error:", err);
     return res.status(500).json({ message: 'Server error deleting task' });
