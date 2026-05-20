@@ -10,7 +10,8 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('dashboard'); 
   
   const [newProjectName, setNewProjectName] = useState('');
-  const [taskForm, setTaskForm] = useState({ title: '', description: '', priority: 'Medium', dueDate: '', assignedTo: '' });
+  // UPDATED: Added 'project' to the initial state
+  const [taskForm, setTaskForm] = useState({ title: '', description: '', priority: 'Medium', dueDate: '', assignedTo: '', project: '' });
   
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
@@ -69,16 +70,26 @@ export default function Dashboard() {
     setActiveTab('create-task'); 
   };
 
+  // UPDATED: Now grabs the project from taskForm instead of hardcoding projects[0]._id
   const handleCreateTask = async (e) => {
     e.preventDefault();
     if (!projects || !projects.length) return alert("Please create a project first.");
-    const payload = { title: taskForm.title, description: taskForm.description, priority: taskForm.priority, dueDate: taskForm.dueDate, project: projects[0]._id };
+    if (!taskForm.project) return alert("Please select a project from the dropdown.");
+
+    const payload = { 
+      title: taskForm.title, 
+      description: taskForm.description, 
+      priority: taskForm.priority, 
+      dueDate: taskForm.dueDate, 
+      project: taskForm.project 
+    };
     if (taskForm.assignedTo) payload.assignedTo = taskForm.assignedTo;
 
     await fetch(`${BACKEND_URL}/api/tasks`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-auth-token': token }, body: JSON.stringify(payload)
     });
-    setTaskForm({ title: '', description: '', priority: 'Medium', dueDate: '', assignedTo: '' });
+    
+    setTaskForm({ title: '', description: '', priority: 'Medium', dueDate: '', assignedTo: '', project: '' });
     alert("Task Assigned Successfully!");
     fetchData();
   };
@@ -117,14 +128,12 @@ export default function Dashboard() {
     ? rawTasks 
     : rawTasks.filter(t => t.assignedTo && (t.assignedTo._id === loggedInUserId || t.assignedTo === loggedInUserId));
 
-  // --- UPDATED: Foolproof Case-Insensitive Filtering ---
   const activeBoardTasks = userVisibleTasks.filter(t => !t.isArchived);
   const archivedHistoryTasks = userVisibleTasks.filter(t => t.isArchived);
 
   const todoTasks = activeBoardTasks.filter(t => !t.status || t.status.toLowerCase().includes('todo'));
   const inProgressTasks = activeBoardTasks.filter(t => t.status && t.status.toLowerCase() === 'in progress');
   
-  // Catch-All: Anything that is not Todo or In Progress is forced here so you can delete it
   const doneTasks = activeBoardTasks.filter(t => {
     if (!t.status) return false;
     const s = t.status.toLowerCase();
@@ -404,13 +413,30 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* TAB: ASSIGN TASKS */}
+          {/* TAB: ASSIGN TASKS (UPDATED) */}
           {activeTab === 'create-task' && user.role === 'Admin' && (
             <div className="max-w-3xl mx-auto bg-slate-900/50 p-8 rounded-3xl border border-slate-800 shadow-2xl">
               <h2 className="text-2xl font-black text-white mb-2">Create and Assign Tasks</h2>
               <form onSubmit={handleCreateTask} className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
                 <div className="md:col-span-2"><label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Title</label><input type="text" placeholder="Task Title..." className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-white focus:ring-2 focus:ring-indigo-500" value={taskForm.title} onChange={(e) => setTaskForm({...taskForm, title: e.target.value})} required /></div>
                 <div className="md:col-span-2"><label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Description</label><textarea placeholder="Task Description..." rows="3" className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-white focus:ring-2 focus:ring-indigo-500 resize-none" value={taskForm.description} onChange={(e) => setTaskForm({...taskForm, description: e.target.value})} /></div>
+                
+                {/* NEW PROJECT DROPDOWN ADDED HERE */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Project</label>
+                  <select 
+                    className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-slate-200 focus:ring-2 focus:ring-indigo-500" 
+                    value={taskForm.project} 
+                    onChange={(e) => setTaskForm({...taskForm, project: e.target.value})} 
+                    required
+                  >
+                    <option value="" disabled>Select a Project</option>
+                    {projects.map(p => (
+                      <option key={p._id} value={p._id}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="md:col-span-2"><label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Assign To User</label><select className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-slate-200 focus:ring-2 focus:ring-indigo-500" value={taskForm.assignedTo} onChange={(e) => setTaskForm({...taskForm, assignedTo: e.target.value})}><option value="">Leave Unassigned</option>{usersList.map(u => (<option key={u._id} value={u._id}>{u.name} ({u.role})</option>))}</select></div>
                 <div><label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Priority</label><select className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-slate-200 focus:ring-2 focus:ring-indigo-500" value={taskForm.priority} onChange={(e) => setTaskForm({...taskForm, priority: e.target.value})}><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></select></div>
                 <div><label className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Due Date</label><input type="date" className="w-full bg-slate-950 border border-slate-700 p-4 rounded-xl outline-none text-slate-200 focus:ring-2 focus:ring-indigo-500 transition [color-scheme:dark]" value={taskForm.dueDate} onChange={(e) => setTaskForm({...taskForm, dueDate: e.target.value})} /></div>
